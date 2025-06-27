@@ -12,24 +12,36 @@ OWNER_ID = int(os.environ.get("OWNER_ID"))
 bot = telegram.Bot(TOKEN)
 
 def start(update, context):
-    update.message.reply_text("🎉 Torrent Downloader Ready. Send a magnet link or .torrent file.")
+    update.message.reply_text("🎉 Send a magnet or .torrent file to begin downloading.")
 
 def handle_magnet(update, context):
     if update.message.from_user.id != OWNER_ID:
         return update.message.reply_text("❌ Access Denied")
 
     magnet = update.message.text
-    update.message.reply_text("🔗 Magnet received. Starting download...")
-    Thread(target=download_and_upload, args=(magnet, update.effective_chat.id)).start()
+    msg = update.message.reply_text("🔗 Magnet received. Preparing...")
+    Thread(target=download_and_upload, args=(magnet, update.effective_chat.id, msg.message_id)).start()
 
 def handle_torrent(update, context):
     file = update.message.document.get_file()
     path = "temp.torrent"
     file.download(path)
-    update.message.reply_text("📥 .torrent received. Starting download...")
-    Thread(target=download_and_upload, args=(path, update.effective_chat.id)).start()
+    msg = update.message.reply_text("📥 .torrent received. Starting...")
+    Thread(target=download_and_upload, args=(path, update.effective_chat.id, msg.message_id)).start()
 
-def download_and_upload(uri, chat_id):
+def send_progress(chat_id, msg_id, text):
+    try:
+        bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text)
+    except:
+        pass
+
+def upload_file(chat_id, path):
+    size = os.path.getsize(path)
+    with open(path, 'rb') as f:
+        bot.send_chat_action(chat_id, telegram.ChatAction.UPLOAD_DOCUMENT)
+        bot.send_document(chat_id, f, filename=os.path.basename(path))
+
+def download_and_upload(uri, chat_id, msg_id):
     ses = lt.session()
     ses.listen_on(6881, 6891)
     ses.add_dht_router("router.bittorrent.com", 6881)
@@ -38,7 +50,7 @@ def download_and_upload(uri, chat_id):
     if uri.startswith("magnet:"):
         params = {'save_path': './downloads/'}
         h = lt.add_magnet_uri(ses, uri, params)
-        bot.send_message(chat_id, "📡 Fetching metadata...")
+        send_progress(chat_id, msg_id, "🔍 Fetching metadata...")
         while not h.has_metadata():
             time.sleep(1)
     else:
@@ -47,37 +59,37 @@ def download_and_upload(uri, chat_id):
         h = ses.add_torrent(params)
 
     name = h.name()
-    bot.send_message(chat_id, f"📂 Torrent: `{name}`\n\n⬇ Downloading...", parse_mode="Markdown")
+    send_progress(chat_id, msg_id, f"📂 Torrent: `{name}`\n\n⬇ Downloading...",)
 
     while not h.is_seed():
         s = h.status()
         percent = s.progress * 100
-        msg = f"{progress_bar(percent)}\n{format_size(s.total_done)} / {format_size(s.total_wanted)}"
-        bot.send_message(chat_id, msg)
+        text = f"⬇ Downloading `{name}`\n{progress_bar(percent)}\n{format_size(s.total_done)} / {format_size(s.total_wanted)}"
+        send_progress(chat_id, msg_id, text)
         time.sleep(5)
 
-    bot.send_message(chat_id, "✅ Download complete. Uploading...")
+    send_progress(chat_id, msg_id, "✅ Download complete. Uploading...")
 
-    file_paths = []
+    file_logs = []
     for root, _, files in os.walk('./downloads/'):
         for file in files:
             fpath = os.path.join(root, file)
-            if os.path.getsize(fpath) < 2 * 1024 * 1024 * 1024:
-                with open(fpath, 'rb') as f:
-                    bot.send_document(chat_id, f, filename=file)
-                    file_paths.append({
-                        "filename": file,
-                        "size": os.path.getsize(fpath)
-                    })
+            try:
+                upload_file(chat_id, fpath)
+                file_logs.append({
+                    "filename": file,
+                    "size": os.path.getsize(fpath)
+                })
+            except Exception as e:
+                bot.send_message(chat_id, f"⚠️ Failed: {file} - {str(e)}")
 
-    # Log to DB
     add_download({
         "name": name,
-        "files": file_paths,
+        "files": file_logs,
         "timestamp": timestamp()
     })
 
-    os.system('rm -rf ./downloads/*')
+    os.system("rm -rf ./downloads/*")
 
 def stats(update, context):
     if update.message.from_user.id != OWNER_ID:
@@ -85,7 +97,7 @@ def stats(update, context):
 
     entries = get_all_downloads()
     msg = "📊 Torrent History:\n\n"
-    for e in entries[:10]:
+    for e in entries[:5]:
         msg += f"📦 {e['name']} ({len(e['files'])} files)\n"
     update.message.reply_text(msg)
 
@@ -94,7 +106,7 @@ def clear(update, context):
         return update.message.reply_text("❌ Access Denied")
 
     clear_downloads()
-    update.message.reply_text("🧹 Cleared DB log.")
+    update.message.reply_text("🧹 Database cleared.")
 
 def main():
     updater = Updater(TOKEN, use_context=True)
