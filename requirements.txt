@@ -3,4 +3,4 @@ humanize
 libtorrent
 pymongo
 dnspython
-
+tqdm
