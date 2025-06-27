@@ -1,4 +1,6 @@
 python-telegram-bot==13.15
-libtorrent
 humanize
-aria2p
+libtorrent
+pymongo
+dnspython
+
