@@ -14,4 +14,3 @@ def get_all_downloads():
 
 def clear_downloads():
     downloads.delete_many({})
-  
