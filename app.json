@@ -1,0 +1,41 @@
+{
+  "name": "Torrent Telegram Bot",
+  "description": "A premium torrent downloader Telegram bot with MongoDB, progress bar, and Heroku support.",
+  "repository": "https://github.com/your-username/torrent-mongo-telegram-bot",
+  "keywords": [
+    "telegram",
+    "torrent",
+    "python",
+    "mongodb",
+    "heroku"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Your Telegram bot token from @BotFather",
+      "required": true
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram user ID to control the bot",
+      "required": true
+    },
+    "MONGO_URI": {
+      "description": "Your MongoDB URI (can be from MongoDB Atlas)",
+      "required": true
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [],
+  "scripts": {
+    "postdeploy": "echo '🎉 Your bot has been deployed! Enable the worker dyno and start using it.'"
+  }
+}
